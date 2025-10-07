@@ -155,7 +155,8 @@ export const createOrder = asyncHandler(async (req, res) => {
       .join("uploads/payments", req.file.filename)
       .replace(/\\/g, "/");
 
-    const { user, products, totalAmount, status } = req.body;
+    const { products, totalAmount } = req.body;
+    const user = req.user._id; // ✅ خده من الـ middleware
 
     // ✅ التحقق من وجود البيانات الأساسية
     if (!user || !products || !totalAmount) {

@@ -19,6 +19,10 @@ const categorySchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    image: {
+      type: String,
+      required: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -28,6 +32,10 @@ const categorySchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
+// ✅ Use forward slashes in file paths
+categorySchema.pre("save", function (next) {
+  if (this.image) this.image = this.image.replace(/\\/g, "/");
+  next();
+});
 const Category = mongoose.model("Category", categorySchema);
 export default Category;

@@ -6,14 +6,17 @@ import {
   createOrder,
   deleteOrder,
 } from "../controllers/orderController.js";
-import { paymentPhotoUpload } from "../middleware/photoUpload.js";
+import { uploadByFolder } from "../middleware/photoUpload.js";
+
 const router = express.Router();
 
-// Public routes
+// 📸 نستخدم uploadByFolder لتحديد فولدر الحفظ (مثلاً "payments")
+const upload = uploadByFolder("payments");
+
 router
   .route("/")
   .get(getOrders)
-  .post(paymentPhotoUpload.single("paymentImage"), createOrder);
+  .post(upload.single("paymentImage"), createOrder);
 
 router.route("/search").get(searchOrders);
 

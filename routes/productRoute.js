@@ -8,17 +8,20 @@ import {
   deleteProductSubImage,
   getProductById,
 } from "../controllers/productController.js";
-import { productPhotoUpload } from "../middleware/photoUpload.js";
+import { uploadByFolder } from "../middleware/photoUpload.js";
+import { adminRoute, protectRoute } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// GET /api/products - Get all products
-// POST /api/products - Create new product
+// 📁 تحديد فولدر التخزين
+const upload = uploadByFolder("products");
 router
   .route("/")
   .get(getProducts)
   .post(
-    productPhotoUpload.fields([
+    protectRoute,
+    adminRoute,
+    upload.fields([
       { name: "mainImage", maxCount: 1 }, // Single main image
       { name: "subImages", maxCount: 10 }, // Up to 10 sub images
     ]),
@@ -31,21 +34,22 @@ router.get("/search", searchProducts);
 // Product by ID routes
 router
   .route("/:id")
-  // GET /api/products/:id - Get single product
   .get(getProductById)
-  // PUT /api/products/:id - Update product
   .put(
-    productPhotoUpload.fields([
+    protectRoute,
+    adminRoute,
+    upload.fields([
       { name: "mainImage", maxCount: 1 },
       { name: "subImages", maxCount: 10 },
     ]),
     updateProduct
   )
-  // DELETE /api/products/:id - Delete product
   .delete(deleteProduct);
-
-// DELETE /api/products/:productId/subimages/:imageIndex - Delete a subimage
-router.delete("/:productId/subimages/:imageIndex", deleteProductSubImage);
-
+router.delete(
+  "/:productId/subimages/:imageIndex",
+  protectRoute,
+  adminRoute,
+  deleteProductSubImage
+);
 
 export default router;

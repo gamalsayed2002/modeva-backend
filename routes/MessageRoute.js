@@ -14,9 +14,9 @@ const router = express.Router();
 router.post("/", createMessage);
 
 // Protected routes (admin only)
-router.get("/", getMessages);
-router.get("/search", searchMessages);
-router.delete("/:id", deleteMessage);
-router.patch("/:id/read", markAsRead);
+router.get("/", protectRoute, adminRoute, getMessages);
+router.get("/search", protectRoute, adminRoute, searchMessages);
+router.delete("/:id", protectRoute, adminRoute, deleteMessage);
+router.patch("/:id/read", protectRoute, adminRoute, markAsRead);
 
 export default router;

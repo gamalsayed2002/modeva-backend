@@ -1,9 +1,10 @@
 import Category from "../models/Category.js";
 import asyncHandler from "express-async-handler";
 import { ObjectId } from "mongodb";
+import path from "path";
 
 export const createCategory = asyncHandler(async (req, res) => {
-  const { name, nameAr } = req.body;
+  const { name, nameAr, description, isActive } = req.body;
 
   if (!name || !nameAr) {
     return res.status(400).json({
@@ -11,6 +12,17 @@ export const createCategory = asyncHandler(async (req, res) => {
       message: "Both English and Arabic names are required",
     });
   }
+
+  // Check if image is provided
+  if (!req.files?.image) {
+    return res.status(400).json({
+      success: false,
+      message: "Category image is required",
+    });
+  }
+
+  const imageFile = req.files.image[0];
+  const image = path.join("uploads/categories", imageFile.filename).replace(/\\/g, "/");
 
   // Check for existing category
   const existingCategory = await Category.findOne({
@@ -25,7 +37,13 @@ export const createCategory = asyncHandler(async (req, res) => {
   }
 
   // Create new category
-  const newCategory = await Category.create({ name, nameAr });
+  const newCategory = await Category.create({ 
+    name, 
+    nameAr, 
+    description, 
+    image,
+    isActive: isActive === "true" || isActive === true 
+  });
 
   res.status(201).json({
     success: true,
@@ -194,7 +212,13 @@ export const updateCategory = asyncHandler(async (req, res) => {
     }
 
     if (isActive !== undefined) {
-      category.isActive = isActive;
+      category.isActive = isActive === "true" || isActive === true;
+    }
+
+    // Handle image update
+    if (req.files?.image) {
+      const imageFile = req.files.image[0];
+      category.image = path.join("uploads/categories", imageFile.filename).replace(/\\/g, "/");
     }
 
     const updatedCategory = await category.save();
