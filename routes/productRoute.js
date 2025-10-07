@@ -8,7 +8,7 @@ import {
   deleteProductSubImage,
   getProductById,
 } from "../controllers/productController.js";
-import photoUpload from "../middleware/photoUpload.js";
+import { productPhotoUpload } from "../middleware/photoUpload.js";
 
 const router = express.Router();
 
@@ -18,7 +18,7 @@ router
   .route("/")
   .get(getProducts)
   .post(
-    photoUpload.fields([
+    productPhotoUpload.fields([
       { name: "mainImage", maxCount: 1 }, // Single main image
       { name: "subImages", maxCount: 10 }, // Up to 10 sub images
     ]),
@@ -35,7 +35,7 @@ router
   .get(getProductById)
   // PUT /api/products/:id - Update product
   .put(
-    photoUpload.fields([
+    productPhotoUpload.fields([
       { name: "mainImage", maxCount: 1 },
       { name: "subImages", maxCount: 10 },
     ]),

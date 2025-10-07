@@ -31,10 +31,18 @@ const orderSchema = new mongoose.Schema(
       enum: ["pending", "shipped", "delivered"],
       default: "pending",
     },
-    
+    paymentImage: {
+      type: String,
+      required: true,
+    },
   },
 
   { timestamps: true }
 );
+// ✅ Use forward slashes in file paths
+orderSchema.pre("save", function (next) {
+  if (this.paymentImage) this.paymentImage = this.paymentImage.replace(/\\/g, "/");
+  next();
+});
 const Order = mongoose.model("Order", orderSchema);
 export default Order;

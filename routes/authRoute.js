@@ -22,6 +22,6 @@ authRouter.put("/profile", protectRoute, updateProfile);
 
 // Admin routes
 authRouter.get("/users/search", protectRoute, adminRoute, searchUsers);
-authRouter.get("/users", protectRoute, adminRoute, getAllUsers);
+authRouter.get("/users", getAllUsers);
 authRouter.get("/users/:id/orders", protectRoute, getUserWithOrders);
 export default authRouter;
