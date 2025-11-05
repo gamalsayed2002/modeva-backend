@@ -74,7 +74,7 @@ export const signup = asyncHandler(async (req, res) => {
     console.error("Signup error:", err);
     // Handle mongoose validation errors
     if (err.name === "ValidationError") {
-      const errors = Object.values(err.errors).map(e => e.message);
+      const errors = Object.values(err.errors).map((e) => e.message);
       return res.status(400).json({ success: false, message: errors[0] });
     }
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -194,11 +194,15 @@ export const refresh = asyncHandler(async (req, res) => {
 // Get Profile
 export const getProfile = asyncHandler(async (req, res) => {
   try {
+    // الحصول على معلومات المستخدم مع استبعاد كلمة المرور
+    const user = await User.findById(req.user.id).select("-password");
+
+    // الحصول على طلبات المستخدم
     const orders = await Order.find({ user: req.user.id })
       .sort({ createdAt: -1 })
       .populate("products.product", "name price mainImage");
 
-    res.status(200).json({ success: true, user: req.user, orders });
+    res.status(200).json({ success: true, user, orders });
   } catch (err) {
     console.error("Get profile error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -268,7 +272,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
-
+/////////////////////////// admin //////////////////////////////////
 // Get all users (Admin)
 export const getAllUsers = asyncHandler(async (req, res) => {
   try {

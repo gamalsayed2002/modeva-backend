@@ -1,31 +1,12 @@
 import Order from "../models/Order.js";
 import User from "../models/User.js";
 import asyncHandler from "express-async-handler";
-import path from "path";
-import { fileURLToPath } from "url";
-import fs from "fs/promises";
-import { existsSync } from "fs";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Helper function to delete file if it exists
-const deleteFileIfExists = async (filePath) => {
-  try {
-    const fullPath = path.join(process.cwd(), filePath);
-    if (existsSync(fullPath)) {
-      await fs.unlink(fullPath);
-    }
-  } catch (error) {
-    console.error(`Error deleting file ${filePath}:`, error);
-  }
-};
+import { cloudinaryUploadImage } from "../lib/cloudinary.js";
 
 export const getOrders = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
-
   const orders = await Order.find()
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -78,10 +59,6 @@ export const getOrderById = asyncHandler(async (req, res) => {
     data: order,
   });
 });
-
-// @desc    Search orders with filters
-// @route   GET /api/orders/search
-// @access  Private/Admin
 
 export const searchOrders = asyncHandler(async (req, res) => {
   const { query, status } = req.query;
@@ -142,7 +119,6 @@ export const searchOrders = asyncHandler(async (req, res) => {
 
 export const createOrder = asyncHandler(async (req, res) => {
   try {
-    // ✅ التحقق من رفع صورة الدفع
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -150,30 +126,35 @@ export const createOrder = asyncHandler(async (req, res) => {
       });
     }
 
-    // ✅ تحديد مسار الصورة بعد الرفع
-    const paymentImage = path
-      .join("uploads/payments", req.file.filename)
-      .replace(/\\/g, "/");
+    // Upload image directly to Cloudinary
+    const uploadResult = await cloudinaryUploadImage(req.file.buffer, "payments");
+    if (!uploadResult || uploadResult.message) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload image to Cloudinary",
+      });
+    }
+    
+    const paymentImage = {
+      url: uploadResult.secure_url,
+      public_id: uploadResult.public_id
+    };
 
     const { products, totalAmount } = req.body;
-    const user = req.user._id; // ✅ خده من الـ middleware
+    const user = req.user._id;
 
-    // ✅ التحقق من وجود البيانات الأساسية
     if (!user || !products || !totalAmount) {
-      await deleteFileIfExists(paymentImage);
       return res.status(400).json({
         success: false,
         message: "User, products and totalAmount are required",
       });
     }
 
-    // ✅ معالجة المنتجات (لو جاية من form-data فهي نص)
     let parsedProducts;
     try {
       parsedProducts =
         typeof products === "string" ? JSON.parse(products) : products;
     } catch (err) {
-      await deleteFileIfExists(paymentImage);
       return res.status(400).json({
         success: false,
         message: "Invalid products format. Must be a valid JSON array.",
@@ -181,14 +162,12 @@ export const createOrder = asyncHandler(async (req, res) => {
     }
 
     if (!Array.isArray(parsedProducts) || parsedProducts.length === 0) {
-      await deleteFileIfExists(paymentImage);
       return res.status(400).json({
         success: false,
         message: "Products must be a non-empty array",
       });
     }
 
-    // ✅ إنشاء الأوردر في قاعدة البيانات
     const order = await Order.create({
       user,
       products: parsedProducts,
@@ -220,14 +199,9 @@ export const createOrder = asyncHandler(async (req, res) => {
     });
   }
 });
-
-// @desc    Delete order
-// @route   DELETE /api/orders/:id
-// @access  Private/Admin
 export const deleteOrder = asyncHandler(async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
-
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -235,16 +209,12 @@ export const deleteOrder = asyncHandler(async (req, res) => {
       });
     }
 
-    // Store payment image path before deletion
-    const { paymentImage } = order;
-
-    // Delete the order from database
-    await Order.findByIdAndDelete(req.params.id);
-
-    // Delete payment image if exists
-    if (paymentImage) {
-      await deleteFileIfExists(paymentImage);
+    // Delete payment image from Cloudinary
+    if (order.paymentImage && order.paymentImage.public_id) {
+      await cloudinaryRemoveImage(order.paymentImage.public_id);
     }
+
+    await Order.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       success: true,

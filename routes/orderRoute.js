@@ -6,12 +6,12 @@ import {
   createOrder,
   deleteOrder,
 } from "../controllers/orderController.js";
-import { uploadByFolder } from "../middleware/photoUpload.js";
+import createUploader from "../middleware/photoUpload.js";
 
 const router = express.Router();
 
-// 📸 نستخدم uploadByFolder لتحديد فولدر الحفظ (مثلاً "payments")
-const upload = uploadByFolder("payments");
+// 📸 إعداد رفع الصور
+const upload = createUploader();
 
 router
   .route("/")

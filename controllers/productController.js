@@ -1,24 +1,6 @@
 import asyncHandler from "express-async-handler";
 import Product from "../models/Product.js";
-import path from "path";
-import { fileURLToPath } from "url";
-import fs from "fs/promises";
-import { existsSync } from "fs";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Helper function to delete file if it exists
-const deleteFileIfExists = async (filePath) => {
-  try {
-    const fullPath = path.join(process.cwd(), filePath);
-    if (existsSync(fullPath)) {
-      await fs.unlink(fullPath);
-    }
-  } catch (error) {
-    console.error(`Error deleting file ${filePath}:`, error);
-  }
-};
+import { cloudinaryRemoveImage, cloudinaryUploadImage } from "../lib/cloudinary.js";
 
 export const getProducts = asyncHandler(async (req, res) => {
   // Pagination
@@ -44,7 +26,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 }) // Newest first
     .skip(skip)
     .limit(limit)
-    .populate("category", "name"); 
+    .populate("category", "name");
 
   // Get total count for pagination
   const total = await Product.countDocuments(query);
@@ -121,21 +103,26 @@ export const deleteProduct = asyncHandler(async (req, res) => {
       });
     }
 
-    // Store image paths before deletion
-    const { mainImage, subImages } = product;
+    // Delete main image from Cloudinary
+    if (product.mainImage && product.mainImage.public_id) {
+      await cloudinaryRemoveImage(product.mainImage.public_id);
+    }
+
+    // Delete all sub images from Cloudinary
+    if (product.subImages && product.subImages.length > 0) {
+      const deletePromises = product.subImages
+        .map((img) => {
+          if (img && img.public_id) {
+            return cloudinaryRemoveImage(img.public_id);
+          }
+        })
+        .filter(Boolean); // Filter out undefined promises
+
+      await Promise.all(deletePromises);
+    }
 
     // Delete the product from database
     await Product.findByIdAndDelete(req.params.id);
-
-    // Delete main image if exists
-    if (mainImage) {
-      await deleteFileIfExists(mainImage);
-    }
-
-    // Delete all sub images if they exist
-    if (subImages?.length) {
-      await Promise.all(subImages.map((img) => deleteFileIfExists(img)));
-    }
 
     res.status(200).json({
       success: true,
@@ -150,16 +137,15 @@ export const deleteProduct = asyncHandler(async (req, res) => {
     });
   }
 });
-
 export const deleteProductSubImage = asyncHandler(async (req, res) => {
   try {
-    const { productId, imageIndex } = req.params;
-    const index = parseInt(imageIndex, 10);
+    const { publicId, productId } = req.body;
 
-    if (isNaN(index) || index < 0) {
+    // التحقق من إن الـ public_id مبعوت
+    if (!publicId) {
       return res.status(400).json({
         success: false,
-        message: "Invalid image index",
+        message: "Public ID is required",
       });
     }
 
@@ -171,29 +157,26 @@ export const deleteProductSubImage = asyncHandler(async (req, res) => {
       });
     }
 
-    if (!product.subImages || index >= product.subImages.length) {
+    // ندور الصورة في مصفوفة الصور الفرعية باستخدام الـ public_id
+    const imageIndex = product.subImages.findIndex(
+      (img) => img && img.public_id === publicId
+    );
+
+    if (imageIndex === -1) {
       return res.status(404).json({
         success: false,
         message: "Image not found",
       });
     }
 
-    // Get the image path before removing it
-    const imageToDelete = product.subImages[index];
+    // نمسح الصورة من Cloudinary
+    await cloudinaryRemoveImage(publicId);
 
-    // Remove the image from the array
-    product.subImages.splice(index, 1);
+    // نمسح الصورة من مصفوفة الصور في قاعدة البيانات
+    product.subImages.splice(imageIndex, 1);
 
-    // Save the updated product
+    // نسيف التعديلات
     await product.save();
-
-    // Delete the image file
-    try {
-      await deleteFileIfExists(imageToDelete);
-    } catch (fileError) {
-      console.error("Error deleting image file:", fileError);
-      // Continue even if file deletion fails
-    }
 
     res.status(200).json({
       success: true,
@@ -246,17 +229,46 @@ export const createProduct = asyncHandler(async (req, res) => {
       message: "Main image is required",
     });
   }
+
+  // Upload main image directly to Cloudinary
   const mainImg = req.files.mainImage[0];
-  const mainImage = path
-    .join("uploads/products", mainImg.filename)
-    .replace(/\\/g, "/");
+  const mainImageResult = await cloudinaryUploadImage(
+    mainImg.buffer,
+    "products"
+  );
+  if (!mainImageResult || mainImageResult.message) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload main image to Cloudinary",
+    });
+  }
+  const mainImage = {
+    url: mainImageResult.secure_url,
+    public_id: mainImageResult.public_id,
+  };
 
   // Handle sub images
   let subImages = [];
   if (req.files.subImages) {
-    subImages = req.files.subImages.map((img) =>
-      path.join("uploads/products", img.filename).replace(/\\/g, "/")
+    // Upload all sub images to Cloudinary
+    const uploadPromises = req.files.subImages.map((img) =>
+      cloudinaryUploadImage(img.buffer, "products")
     );
+    const uploadResults = await Promise.all(uploadPromises);
+
+    // Check for upload errors
+    const hasErrors = uploadResults.some((result) => !result || result.message);
+    if (hasErrors) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload one or more sub images to Cloudinary",
+      });
+    }
+
+    subImages = uploadResults.map((result) => ({
+      url: result.secure_url,
+      public_id: result.public_id,
+    }));
   }
 
   // Create product
@@ -289,7 +301,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
   if (req.body.name) {
     updateFields.name = req.body.name;
   }
-  
+
   if (req.body.nameAr) {
     updateFields.nameAr = req.body.nameAr;
   }
@@ -298,7 +310,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
   if (req.body.description) {
     updateFields.description = req.body.description;
   }
-  
+
   if (req.body.descriptionAr) {
     updateFields.descriptionAr = req.body.descriptionAr;
   }
@@ -342,39 +354,55 @@ export const updateProduct = asyncHandler(async (req, res) => {
   }
 
   // Handle file updates
-  const currentProduct = await Product.findById(productId).select(
-    "mainImage subImages"
-  );
-
   // Handle main image update
   if (req.files?.mainImage) {
     const mainImg = req.files.mainImage[0];
-    const newMainImagePath = path.join("uploads/products", mainImg.filename);
-
-    // Delete old main image if it exists
-    if (currentProduct?.mainImage) {
-      await deleteFileIfExists(currentProduct.mainImage);
+    const mainImageResult = await cloudinaryUploadImage(
+      mainImg.buffer,
+      "products"
+    );
+    if (!mainImageResult || mainImageResult.message) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload main image to Cloudinary",
+      });
     }
-
-    updateFields.mainImage = newMainImagePath;
+    updateFields.mainImage = {
+      url: mainImageResult.secure_url,
+      public_id: mainImageResult.public_id,
+    };
   }
 
   // Handle sub images update
   if (req.files?.subImages) {
-    const newSubImages = req.files.subImages.map((img) =>
-      path.join("uploads/products", img.filename)
+    // Upload all sub images to Cloudinary
+    const uploadPromises = req.files.subImages.map((img) =>
+      cloudinaryUploadImage(img.buffer, "products")
     );
+    const uploadResults = await Promise.all(uploadPromises);
+
+    // Check for upload errors
+    const hasErrors = uploadResults.some((result) => !result || result.message);
+    if (hasErrors) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload one or more sub images to Cloudinary",
+      });
+    }
+
+    const newSubImages = uploadResults.map((result) => ({
+      url: result.secure_url,
+      public_id: result.public_id,
+    }));
 
     if (req.body.subImages) {
       // Replace all sub images
-      if (currentProduct?.subImages?.length) {
-        await Promise.all(
-          currentProduct.subImages.map((img) => deleteFileIfExists(img))
-        );
-      }
       updateFields.subImages = newSubImages;
     } else {
       // Add to existing sub images
+      const currentProduct = await Product.findById(productId).select(
+        "subImages"
+      );
       updateFields.subImages = [
         ...(currentProduct?.subImages || []),
         ...newSubImages,

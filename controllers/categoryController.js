@@ -1,7 +1,7 @@
 import Category from "../models/Category.js";
 import asyncHandler from "express-async-handler";
 import { ObjectId } from "mongodb";
-import path from "path";
+import { cloudinaryUploadImage } from "../lib/cloudinary.js";
 
 export const createCategory = asyncHandler(async (req, res) => {
   const { name, nameAr, description, isActive } = req.body;
@@ -22,7 +22,23 @@ export const createCategory = asyncHandler(async (req, res) => {
   }
 
   const imageFile = req.files.image[0];
-  const image = path.join("uploads/categories", imageFile.filename).replace(/\\/g, "/");
+
+  // Upload image directly to Cloudinary
+  const uploadResult = await cloudinaryUploadImage(
+    imageFile.buffer,
+    "categories"
+  );
+  if (!uploadResult || uploadResult.message) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload image to Cloudinary",
+    });
+  }
+
+  const image = {
+    url: uploadResult.secure_url,
+    public_id: uploadResult.public_id,
+  };
 
   // Check for existing category
   const existingCategory = await Category.findOne({
@@ -37,12 +53,12 @@ export const createCategory = asyncHandler(async (req, res) => {
   }
 
   // Create new category
-  const newCategory = await Category.create({ 
-    name, 
-    nameAr, 
-    description, 
+  const newCategory = await Category.create({
+    name,
+    nameAr,
+    description,
     image,
-    isActive: isActive === "true" || isActive === true 
+    isActive: isActive === "true" || isActive === true,
   });
 
   res.status(201).json({
@@ -91,7 +107,7 @@ export const deleteCategory = asyncHandler(async (req, res) => {
   try {
     const { categoryId } = req.params;
 
-    const category = await Category.findByIdAndDelete(categoryId);
+    const category = await Category.findById(categoryId);
 
     if (!category) {
       return res.status(404).json({
@@ -99,6 +115,14 @@ export const deleteCategory = asyncHandler(async (req, res) => {
         message: "Category not found",
       });
     }
+
+    // Delete image from Cloudinary
+    if (category.image && category.image.public_id) {
+      await cloudinaryRemoveImage(category.image.public_id);
+    }
+
+    // Delete category from database
+    await Category.findByIdAndDelete(categoryId);
 
     res.status(200).json({
       success: true,
@@ -138,26 +162,13 @@ export const getCategoryById = asyncHandler(async (req, res) => {
 
 // Get all categories
 export const getAllCategories = asyncHandler(async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
-
   try {
-    const categories = await Category.find({})
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
-
-    const total = await Category.countDocuments({});
-    const totalPages = Math.ceil(total / limit);
+    const categories = await Category.find({}).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
       count: categories.length,
       data: categories,
-      totalPages,
-      currentPage: page,
-      total,
     });
   } catch (error) {
     console.error("Error fetching categories:", error);
@@ -218,7 +229,23 @@ export const updateCategory = asyncHandler(async (req, res) => {
     // Handle image update
     if (req.files?.image) {
       const imageFile = req.files.image[0];
-      category.image = path.join("uploads/categories", imageFile.filename).replace(/\\/g, "/");
+
+      // Upload image directly to Cloudinary
+      const uploadResult = await cloudinaryUploadImage(
+        imageFile.buffer,
+        "categories"
+      );
+      if (!uploadResult || uploadResult.message) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to upload image to Cloudinary",
+        });
+      }
+
+      category.image = {
+        url: uploadResult.secure_url,
+        public_id: uploadResult.public_id,
+      };
     }
 
     const updatedCategory = await category.save();

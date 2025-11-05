@@ -8,13 +8,13 @@ import {
   deleteProductSubImage,
   getProductById,
 } from "../controllers/productController.js";
-import { uploadByFolder } from "../middleware/photoUpload.js";
+import createUploader from "../middleware/photoUpload.js";
 import { adminRoute, protectRoute } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// 📁 تحديد فولدر التخزين
-const upload = uploadByFolder("products");
+// 📁 إعداد رفع الصور
+const upload = createUploader();
 router
   .route("/")
   .get(getProducts)
@@ -45,11 +45,8 @@ router
     updateProduct
   )
   .delete(deleteProduct);
-router.delete(
-  "/:productId/subimages/:imageIndex",
-  protectRoute,
-  adminRoute,
-  deleteProductSubImage
-);
+
+// Delete subimage by public_id
+router.post("/subimages", protectRoute, adminRoute, deleteProductSubImage);
 
 export default router;

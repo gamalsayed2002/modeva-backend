@@ -7,13 +7,13 @@ import {
   getCategoryById,
   updateCategory,
 } from "../controllers/categoryController.js";
-import { uploadByFolder } from "../middleware/photoUpload.js";
+import createUploader from "../middleware/photoUpload.js";
 import { adminRoute, protectRoute } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// 📁 تحديد فولدر الصور
-const upload = uploadByFolder("categories");
+// 📁 إعداد رفع الصور
+const upload = createUploader();
 
 // Public routes
 router.get("/", getAllCategories);
