@@ -1,7 +1,10 @@
 import Category from "../models/Category.js";
 import asyncHandler from "express-async-handler";
 import { ObjectId } from "mongodb";
-import { cloudinaryUploadImage } from "../lib/cloudinary.js";
+import {
+  cloudinaryRemoveImage,
+  cloudinaryUploadImage,
+} from "../lib/cloudinary.js";
 
 export const createCategory = asyncHandler(async (req, res) => {
   const { name, nameAr, description, isActive } = req.body;
