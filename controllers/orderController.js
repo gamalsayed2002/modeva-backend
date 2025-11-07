@@ -1,4 +1,5 @@
 import Order from "../models/Order.js";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import asyncHandler from "express-async-handler";
 import { cloudinaryUploadImage } from "../lib/cloudinary.js";
@@ -127,22 +128,30 @@ export const createOrder = asyncHandler(async (req, res) => {
     }
 
     // Upload image directly to Cloudinary
-    const uploadResult = await cloudinaryUploadImage(req.file.buffer, "payments");
+    const uploadResult = await cloudinaryUploadImage(
+      req.file.buffer,
+      "payments"
+    );
     if (!uploadResult || uploadResult.message) {
       return res.status(500).json({
         success: false,
         message: "Failed to upload image to Cloudinary",
       });
     }
-    
+
     const paymentImage = {
       url: uploadResult.secure_url,
-      public_id: uploadResult.public_id
+      public_id: uploadResult.public_id,
     };
 
     const { products, totalAmount } = req.body;
+    console.log(req.user);
     const user = req.user._id;
-
+    console.log({
+      user,
+      type: typeof user,
+      isValidObjectId: mongoose.isValidObjectId(user),
+    });
     if (!user || !products || !totalAmount) {
       return res.status(400).json({
         success: false,
@@ -172,7 +181,7 @@ export const createOrder = asyncHandler(async (req, res) => {
       user,
       products: parsedProducts,
       totalAmount,
-      status: status || "pending",
+      status: "pending",
       paymentImage,
     });
 
